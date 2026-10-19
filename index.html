@@ -74,9 +74,12 @@ input[type=file]{display:none}
 /* Çoklu Dosya Kartları */
 .picked-item{display:flex;flex-direction:column;gap:8px;padding:12px 16px;border-bottom:.5px solid var(--sep)}
 .picked-item:last-child{border-bottom:none}
-.picked-row{display:flex;align-items:center;gap:12px}
+.picked-row{display:flex;align-items:center;gap:10px}
 .rename-input{flex:1;border:none;outline:none;background:var(--fill);padding:8px 12px;border-radius:8px;font-size:15px;color:var(--text);font-family:inherit}
 .ext-badge{font-size:13px;color:var(--sub);font-weight:600;flex:none}
+.remove-btn{background:none;border:none;cursor:pointer;padding:6px;color:var(--sub);display:flex;align-items:center;justify-content:center;border-radius:50%;transition:.15s;flex:none}
+.remove-btn:hover{background:var(--fill);color:var(--red)}
+.remove-btn svg{width:18px;height:18px;fill:currentColor}
 
 .progress{height:5px;border-radius:3px;background:var(--fill);overflow:hidden;display:none;width:100%}
 .progress.show{display:block}
@@ -290,23 +293,53 @@ onAuthStateChanged(auth, user => {
   }
 });
 
-/* ---------- Çoklu Dosya Seçme & Drag-Drop ---------- */
+/* ---------- Önizleme Liste Durumunu Güncelleme (Ekle / Çıkar) ---------- */
+function updateInputState() {
+  const currentInputs = document.querySelectorAll(".rename-input");
+  currentInputs.forEach((input, i) => {
+    if (pickedFiles[i]) {
+      pickedFiles[i].baseName = input.value.trim() || pickedFiles[i].baseName;
+    }
+  });
+}
+
 function pickFiles(fileList) {
   if (!fileList || fileList.length === 0) return;
-  const filesArray = Array.from(fileList);
+  updateInputState();
+
+  const newFilesArray = Array.from(fileList);
+  const availableSlots = 4 - pickedFiles.length;
   
-  if (filesArray.length > 4) {
-    toast("En fazla 4 dosya seçebilirsiniz.");
+  if (availableSlots <= 0) {
+    toast("En fazla 4 dosya ekleyebilirsiniz.");
+    $("fileInput").value = "";
+    return;
   }
-  
-  pickedFiles = filesArray.slice(0, 4).map(file => ({
+
+  const filesToAdd = newFilesArray.slice(0, availableSlots).map(file => ({
     file: file,
     ext: ext(file.name),
     baseName: baseNameWithoutExt(file.name)
   }));
 
+  if (newFilesArray.length > availableSlots) {
+    toast(`En fazla 4 dosya seçilebilir. İlk ${availableSlots} dosya eklendi.`);
+  }
+
+  pickedFiles = [...pickedFiles, ...filesToAdd];
+  $("fileInput").value = "";
   renderPickedFiles();
 }
+
+window.removePickedFile = function(idx) {
+  updateInputState();
+  pickedFiles.splice(idx, 1);
+  if (pickedFiles.length === 0) {
+    $("picked").classList.remove("show");
+  } else {
+    renderPickedFiles();
+  }
+};
 
 function renderPickedFiles() {
   const listContainer = $("pickedList");
@@ -320,6 +353,9 @@ function renderPickedFiles() {
         <div class="ficon" style="background:${color(item.ext)}">${esc(badge(item.ext))}</div>
         <input type="text" class="rename-input" data-index="${idx}" value="${esc(item.baseName)}" placeholder="Dosya adı">
         <span class="ext-badge">.${item.ext.toLowerCase()}</span>
+        <button type="button" class="remove-btn" onclick="removePickedFile(${idx})" title="Kaldır">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
       </div>
       <div class="progress" id="progress-${idx}"><i></i></div>
     `;
@@ -339,7 +375,7 @@ drop.addEventListener("drop", e => {
   pickFiles(e.dataTransfer.files);
 });
 
-/* ---------- Yükleme Mantığı (Aynı Anda 4 Dosya) ---------- */
+/* ---------- Yükleme Mantığı (Paralel 4 Dosya) ---------- */
 const CHUNK = 512 * 1024;            
 const MAX_DB = 25 * 1024 * 1024;     
 
@@ -378,14 +414,12 @@ async function uploadToDbWithProgress(file, key, setBarFn) {
 }
 
 $("uploadBtn").onclick = async () => {
+  updateInputState();
   if (!pickedFiles.length || !currentUser) return;
   $("uploadBtn").disabled = true;
 
-  // Tüm dosya girdilerini topla ve formatı koruyarak isimleri güncelle
   const uploadTasks = pickedFiles.map(async (item, idx) => {
-    const inputEl = document.querySelector(`.rename-input[data-index="${idx}"]`);
-    const customBase = inputEl ? inputEl.value.trim() : item.baseName;
-    const finalName = (customBase ? customBase : item.baseName) + "." + item.ext.toLowerCase();
+    const finalName = (item.baseName ? item.baseName : "dosya") + "." + item.ext.toLowerCase();
 
     const file = item.file;
     const uid = currentUser.uid;
@@ -420,7 +454,6 @@ $("uploadBtn").onclick = async () => {
     }
   });
 
-  // Aynı anda (paralel) yüklemeleri başlat
   const results = await Promise.all(uploadTasks);
   const successCount = results.filter(Boolean).length;
 
@@ -552,12 +585,4 @@ $("downloadBtn").onclick = async () => {
       toast("İndirme başladı ✓");
     }
   } catch (err) { 
-    toast("İndirilemedi: " + (err.code || err.message)); 
-  } finally {
-    btn.disabled = false; 
-    btn.textContent = "İndir";
-  }
-};
-</script>
-</body>
-</html>
+    toast("İndirilemedi: " + (err.code || err.
