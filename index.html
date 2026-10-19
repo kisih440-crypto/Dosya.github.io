@@ -71,15 +71,14 @@ input[type=file]{display:none}
 .picked{display:none;margin-top:12px}
 .picked.show{display:block}
 
-/* Çoklu Dosya Kartları */
+/* Çoklu Dosya Kartları & Silme Butonu */
 .picked-item{display:flex;flex-direction:column;gap:8px;padding:12px 16px;border-bottom:.5px solid var(--sep)}
 .picked-item:last-child{border-bottom:none}
 .picked-row{display:flex;align-items:center;gap:10px}
 .rename-input{flex:1;border:none;outline:none;background:var(--fill);padding:8px 12px;border-radius:8px;font-size:15px;color:var(--text);font-family:inherit}
 .ext-badge{font-size:13px;color:var(--sub);font-weight:600;flex:none}
-.remove-btn{background:none;border:none;cursor:pointer;padding:6px;color:var(--sub);display:flex;align-items:center;justify-content:center;border-radius:50%;transition:.15s;flex:none}
-.remove-btn:hover{background:var(--fill);color:var(--red)}
-.remove-btn svg{width:18px;height:18px;fill:currentColor}
+.remove-btn{background:none;border:none;color:var(--red);font-size:18px;font-weight:bold;cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1;display:flex;align-items:center;justify-content:center}
+.remove-btn:hover{background:var(--fill)}
 
 .progress{height:5px;border-radius:3px;background:var(--fill);overflow:hidden;display:none;width:100%}
 .progress.show{display:block}
@@ -260,6 +259,340 @@ const authErr = code => ({
   "auth/network-request-failed":"İnternet bağlantısı yok."
 }[code] || "Bir hata oluştu: " + code);
 
-/* ---------- Giriş / Çıkış ---------- */
+/* ---------- Giriş/Çıkış ---------- */
 async function doLogin() {
   const email = $("email").value.trim(), pw = $("password").value;
+  if (!email || !pw) { $("loginErr").textContent = "E-posta ve şifre gir."; return; }
+  $("loginBtn").disabled = true; $("loginErr").textContent = "";
+  try {
+    await signInWithEmailAndPassword(auth, email, pw);
+  } catch (e) { 
+    $("loginErr").textContent = authErr(e.code); 
+  } finally {
+    $("loginBtn").disabled = false;
+  }
+}
+
+$("loginBtn").onclick = doLogin;
+$("password").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+$("logoutBtn").onclick = () => signOut(auth);
+
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  if (user) {
+    $("userEmail").textContent = user.email;
+    show("homeScreen"); 
+    listenFiles();
+  } else {
+    if (unsubFiles) { unsubFiles(); unsubFiles = null; }
+    pickedFiles = []; 
+    $("picked").classList.remove("show");
+    $("password").value = ""; 
+    show("loginScreen");
+  }
+});
+
+/* ---------- Çoklu Dosya Seçme, Ekleme/Çıkarma & Drag-Drop ---------- */
+function pickFiles(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  const newFilesArray = Array.from(fileList);
+  
+  // Mevcut listedeki dosyalarla birleştir, mükerrer dosyaları filtrele
+  newFilesArray.forEach(f => {
+    const isAlreadyPicked = pickedFiles.some(item => item.file.name === f.name && item.file.size === f.size);
+    if (!isAlreadyPicked) {
+      if (pickedFiles.length < 4) {
+        pickedFiles.push({
+          file: f,
+          ext: ext(f.name),
+          baseName: baseNameWithoutExt(f.name)
+        });
+      }
+    }
+  });
+
+  if (pickedFiles.length >= 4 && (pickedFiles.length + newFilesArray.length > 4)) {
+    toast("En fazla 4 dosya seçebilirsiniz.");
+  }
+
+  renderPickedFiles();
+}
+
+function removeFile(index) {
+  pickedFiles.splice(index, 1);
+  renderPickedFiles();
+}
+
+function renderPickedFiles() {
+  const listContainer = $("pickedList");
+  listContainer.innerHTML = "";
+
+  if (pickedFiles.length === 0) {
+    $("picked").classList.remove("show");
+    $("fileInput").value = "";
+    return;
+  }
+
+  pickedFiles.forEach((item, idx) => {
+    const div = document.createElement("div");
+    div.className = "picked-item";
+    div.innerHTML = `
+      <div class="picked-row">
+        <div class="ficon" style="background:${color(item.ext)}">${esc(badge(item.ext))}</div>
+        <input type="text" class="rename-input" data-index="${idx}" value="${esc(item.baseName)}" placeholder="Dosya adı">
+        <span class="ext-badge">.${item.ext.toLowerCase()}</span>
+        <button class="remove-btn" title="Kaldır" data-index="${idx}">✕</button>
+      </div>
+      <div class="progress" id="progress-${idx}"><i></i></div>
+    `;
+    
+    // İsim değişikliğini anlık olarak kaydet
+    const inputEl = div.querySelector(".rename-input");
+    inputEl.oninput = e => {
+      pickedFiles[idx].baseName = e.target.value;
+    };
+
+    // Kaldır butonunun tıklanması
+    const removeBtn = div.querySelector(".remove-btn");
+    removeBtn.onclick = () => removeFile(idx);
+
+    listContainer.appendChild(div);
+  });
+
+  $("picked").classList.add("show");
+}
+
+$("fileInput").onchange = e => {
+  pickFiles(e.target.files);
+  $("fileInput").value = ""; // Aynı dosyayı tekrar seçebilmeyi mümkün kılmak için sıfırla
+};
+
+const drop = $("drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => {
+  e.preventDefault();
+  drop.classList.remove("over");
+  pickFiles(e.dataTransfer.files);
+});
+
+/* ---------- Yükleme Mantığı (Aynı Anda Çoklu Dosya) ---------- */
+const CHUNK = 512 * 1024;            
+const MAX_DB = 25 * 1024 * 1024;     
+
+const toB64 = blob => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(r.result.split(",")[1]);
+  r.onerror = () => rej(r.error);
+  r.readAsDataURL(blob);
+});
+
+function uploadToStorageWithProgress(file, path, setBarFn) {
+  return new Promise((resolve, reject) => {
+    const task = uploadBytesResumable(ref(storage, path), file, { contentType: file.type || "application/octet-stream" });
+    let started = false;
+    const timer = setTimeout(() => { if (!started) { task.cancel(); reject({ code: "storage/timeout" }); } }, 12000);
+    task.on("state_changed",
+      s => { 
+        if (s.bytesTransferred > 0) { started = true; clearTimeout(timer); } 
+        if(s.totalBytes > 0) setBarFn((s.bytesTransferred / s.totalBytes) * 100); 
+      },
+      err => { clearTimeout(timer); reject(err); },
+      () => { clearTimeout(timer); resolve(); }
+    );
+  });
+}
+
+async function uploadToDbWithProgress(file, key, setBarFn) {
+  if (file.size > MAX_DB) throw { code: "dosya-cok-buyuk (en fazla 25 MB)" };
+  const n = Math.max(1, Math.ceil(file.size / CHUNK));
+  for (let i = 0; i < n; i++) {
+    const data = await toB64(file.slice(i * CHUNK, (i + 1) * CHUNK));
+    await set(dbRef(db, `chunks/${currentUser.uid}/${key}/${i}`), data);
+    setBarFn(((i + 1) / n) * 100);
+  }
+  return n;
+}
+
+$("uploadBtn").onclick = async () => {
+  if (!pickedFiles.length || !currentUser) return;
+  $("uploadBtn").disabled = true;
+
+  // Tüm dosya girdilerini topla ve formatı koruyarak isimleri güncelle
+  const uploadTasks = pickedFiles.map(async (item, idx) => {
+    const customBase = item.baseName ? item.baseName.trim() : "";
+    const finalName = (customBase ? customBase : baseNameWithoutExt(item.file.name)) + "." + item.ext.toLowerCase();
+
+    const file = item.file;
+    const uid = currentUser.uid;
+    const metaRef = push(dbRef(db, `files/${uid}`));
+    const path = `uploads/${uid}/${Date.now()}_${finalName}`;
+    const base = {
+      name: finalName, size: file.size,
+      type: file.type || "application/octet-stream",
+      ext: item.ext, createdAt: Date.now()
+    };
+
+    const progressDiv = $(`progress-${idx}`);
+    const barEl = progressDiv ? progressDiv.querySelector("i") : null;
+    if (progressDiv) progressDiv.classList.add("show");
+    const setBar = p => { if (barEl) barEl.style.width = p + "%"; };
+
+    try {
+      let meta;
+      try {
+        await uploadToStorageWithProgress(file, path, setBar);
+        meta = { ...base, store: "storage", path };
+      } catch (e) {
+        setBar(0);
+        const n = await uploadToDbWithProgress(file, metaRef.key, setBar);
+        meta = { ...base, store: "db", chunks: n };
+      }
+      await set(metaRef, meta);
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  });
+
+  // Aynı anda (paralel) yüklemeleri başlat
+  const results = await Promise.all(uploadTasks);
+  const successCount = results.filter(Boolean).length;
+
+  if (successCount > 0) {
+    toast(`${successCount} dosya başarıyla yüklendi ✓`);
+    pickedFiles = [];
+    renderPickedFiles();
+  } else {
+    toast("Yükleme sırasında hata oluştu.");
+  }
+  $("uploadBtn").disabled = false;
+};
+
+/* ---------- Liste Dinleme ---------- */
+function listenFiles() {
+  const list = $("list");
+  list.innerHTML = '<div class="spinner"></div>';
+  if (unsubFiles) unsubFiles();
+
+  unsubFiles = onValue(dbRef(db, `files/${currentUser.uid}`), snap => {
+    const items = [];
+    snap.forEach(c => { 
+      const v = c.val(); 
+      items.push({ 
+        id: c.key, name: v.name, size: v.size, date: v.createdAt, 
+        path: v.path, store: v.store || "storage", chunks: v.chunks, type: v.type 
+      }); 
+    });
+    items.sort((a, b) => b.date - a.date);
+
+    if (!items.length) { 
+      list.innerHTML = '<div class="empty">Henüz dosya yüklenmedi.</div>'; 
+      return; 
+    }
+
+    list.innerHTML = "";
+    items.forEach(it => {
+      const e = ext(it.name);
+      const row = document.createElement("div");
+      row.className = "file";
+      row.innerHTML = `
+        <div class="ficon" style="background:${color(e)}">${esc(badge(e))}</div>
+        <div class="finfo">
+          <div class="fname">${esc(it.name)}</div>
+          <div class="fmeta">${e} · ${size(it.size)} · ${dateStr(it.date)}</div>
+        </div>
+        <svg class="chev" viewBox="0 0 8 14"><path d="M1 1l6 6-6 6"/></svg>`;
+      row.onclick = () => openSheet(it);
+      list.appendChild(row);
+    });
+  }, err => {
+    list.innerHTML = `<div class="empty">Dosyalar yüklenemedi (${esc(err.code || err.message)}).</div>`;
+  });
+}
+
+/* ---------- Detay & İndirme Mantığı ---------- */
+function openSheet(it) {
+  selected = it;
+  const e = ext(it.name);
+  $("sIcon").textContent = badge(e); 
+  $("sIcon").style.background = color(e);
+  $("sName").textContent = it.name;
+  $("sFormat").textContent = e;
+  $("sSize").textContent = size(it.size);
+  $("sDate").textContent = dateStr(it.date);
+  $("overlay").classList.add("show"); 
+  $("sheet").classList.add("show");
+}
+
+function closeSheet() { 
+  $("overlay").classList.remove("show"); 
+  $("sheet").classList.remove("show"); 
+}
+
+$("overlay").onclick = closeSheet; 
+$("closeBtn").onclick = closeSheet;
+
+$("downloadBtn").onclick = async () => {
+  if (!selected) return;
+  const btn = $("downloadBtn"); 
+  btn.disabled = true; 
+  btn.textContent = "İndiriliyor…";
+
+  const saveBlob = (blob, filename) => {
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    a.href = url; 
+    a.download = filename;
+    document.body.appendChild(a); 
+    a.click(); 
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  };
+
+  try {
+    if (selected.store === "db") {
+      const snap = await get(dbRef(db, `chunks/${currentUser.uid}/${selected.id}`));
+      if (!snap.exists()) throw new Error("Dosya parçaları bulunamadı.");
+      
+      const parts = [];
+      for (let i = 0; i < selected.chunks; i++) {
+        const chunkData = snap.child(String(i)).val();
+        if (!chunkData) continue;
+        const bin = atob(chunkData);
+        const u8 = new Uint8Array(bin.length);
+        for (let j = 0; j < bin.length; j++) u8[j] = bin.charCodeAt(j);
+        parts.push(u8);
+      }
+      saveBlob(new Blob(parts, { type: selected.type || "application/octet-stream" }), selected.name);
+      toast("İndirme tamamlandı ✓");
+    } else {
+      const url = await getDownloadURL(ref(storage, selected.path));
+      try {
+        const res = await fetch(url);
+        if(!res.ok) throw new Error("Ağ yanıtı başarısız.");
+        const blob = await res.blob();
+        saveBlob(blob, selected.name);
+      } catch (_) {
+        const a = document.createElement("a");
+        a.href = url; 
+        a.download = selected.name; 
+        a.target = "_blank"; 
+        a.rel = "noopener";
+        document.body.appendChild(a); 
+        a.click(); 
+        a.remove();
+      }
+      toast("İndirme başladı ✓");
+    }
+  } catch (err) { 
+    toast("İndirilemedi: " + (err.code || err.message)); 
+  } finally {
+    btn.disabled = false; 
+    btn.textContent = "İndir";
+  }
+};
+</script>
+</body>
+</html>
