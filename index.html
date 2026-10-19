@@ -156,51 +156,35 @@ input[type=file]{display:none}
 <div class="screen" id="homeScreen">
   <div class="nav">
     <div class="nav-top">
-      <button id="adminPanelBtn" style="display:none; color: var(--green); font-weight:600;">Admin Paneli</button>
+      <span id="roleBadge" style="font-size:13px; font-weight:600; color:var(--green); display:none;">Admin Modu</span>
       <button id="logoutBtn">Çıkış</button>
     </div>
-    <h1>Dosyalarım</h1>
+    <h1 id="screenTitle">Dosyalarım</h1>
     <p class="email" id="userEmail"></p>
   </div>
 
-  <div class="section">Dosya Yükle (En Fazla 4)</div>
-  <label class="drop" id="drop" for="fileInput">
-    <div class="plus"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></div>
-    <b>Dosyaları seç</b>
-    <span>veya buraya sürükle (En fazla 4 adet)</span>
-  </label>
-  <input type="file" id="fileInput" multiple>
+  <!-- Normal kullanıcılar için yükleme alanı (Adminse gizlenebilir veya yükleme yapabilir) -->
+  <div id="uploadSection">
+    <div class="section">Dosya Yükle (En Fazla 4)</div>
+    <label class="drop" id="drop" for="fileInput">
+      <div class="plus"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></div>
+      <b>Dosyaları seç</b>
+      <span>veya buraya sürükle (En fazla 4 adet)</span>
+    </label>
+    <input type="file" id="fileInput" multiple>
 
-  <div class="picked" id="picked">
-    <div class="group" id="pickedList"></div>
-    <button class="btn" id="uploadBtn">Yükle</button>
+    <div class="picked" id="picked">
+      <div class="group" id="pickedList"></div>
+      <button class="btn" id="uploadBtn">Yükle</button>
+    </div>
   </div>
 
   <div class="search-box">
     <input type="text" id="searchInput" placeholder="Dosyalarda ara...">
   </div>
 
-  <div class="section">Yüklenen Dosyalar</div>
+  <div class="section" id="listSectionTitle">Yüklenen Dosyalar</div>
   <div class="group" id="list"><div class="spinner"></div></div>
-</div>
-
-<!-- ADMIN PANELİ EKRANI -->
-<div class="screen" id="adminScreen">
-  <div class="nav">
-    <div class="nav-top">
-      <button id="backToHomeBtn">← Dosyalarım</button>
-      <button id="adminLogoutBtn">Çıkış</button>
-    </div>
-    <h1>Admin Paneli</h1>
-    <p class="email" id="adminUserEmail"></p>
-  </div>
-
-  <div class="search-box">
-    <input type="text" id="adminSearchInput" placeholder="Tüm dosyalarda ve kullanıcı UID'lerinde ara...">
-  </div>
-
-  <div class="section">Sistemdeki Tüm Kullanıcı Dosyaları</div>
-  <div class="group" id="adminList"><div class="spinner"></div></div>
 </div>
 
 <!-- DETAY SHEET -->
@@ -249,7 +233,6 @@ const ADMIN_UID = "J0VHrKf0jBMssN4GyxmRLa8Kou63";
 const $ = id => document.getElementById(id);
 let currentUser = null, pickedFiles = [], selected = null, unsubFiles = null;
 let allFilesData = [];
-let currentViewIsAdmin = false;
 
 /* ---------- Yardımcı Fonksiyonlar ---------- */
 const colors = {
@@ -322,22 +305,23 @@ async function doLogin() {
 $("loginBtn").onclick = doLogin;
 $("password").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
 $("logoutBtn").onclick = () => signOut(auth);
-$("adminLogoutBtn").onclick = () => signOut(auth);
 
 onAuthStateChanged(auth, user => {
   currentUser = user;
   if (user) {
     $("userEmail").textContent = user.email;
-    $("adminUserEmail").textContent = user.email + " (Admin)";
     
     if (user.uid === ADMIN_UID) {
-      $("adminPanelBtn").style.display = "inline-block";
+      $("roleBadge").style.display = "inline-block";
+      $("screenTitle").textContent = "Tüm Dosyalar (Admin)";
+      listenAllFilesForAdmin();
     } else {
-      $("adminPanelBtn").style.display = "none";
+      $("roleBadge").style.display = "none";
+      $("screenTitle").textContent = "Dosyalarım";
+      listenFiles();
     }
 
     show("homeScreen"); 
-    listenFiles();
   } else {
     if (unsubFiles) { unsubFiles(); unsubFiles = null; }
     pickedFiles = []; 
@@ -347,21 +331,11 @@ onAuthStateChanged(auth, user => {
   }
 });
 
-/* ---------- Navigasyon & Dinleme ---------- */
-$("adminPanelBtn").onclick = () => {
-  show("adminScreen");
-  listenAllFilesForAdmin();
-};
-
-$("backToHomeBtn").onclick = () => {
-  show("homeScreen");
-  listenFiles();
-};
-
-function renderList(containerId, items, searchTerm) {
-  const list = $(containerId);
-  
+/* ---------- Liste Render ve Arama ---------- */
+function renderList(items, searchTerm) {
+  const list = $("list");
   const query = (searchTerm || "").toLocaleLowerCase('tr-TR');
+  
   const filtered = items.filter(it => {
     if (!query) return true;
     const matchName = it.name.toLocaleLowerCase('tr-TR').includes(query);
@@ -378,6 +352,7 @@ function renderList(containerId, items, searchTerm) {
   list.innerHTML = "";
   filtered.forEach(it => {
     const e = ext(it.name);
+    const isAdmin = currentUser && currentUser.uid === ADMIN_UID;
     const row = document.createElement("div");
     row.className = `file ${it.pinned ? 'pinned-row' : ''}`;
     row.innerHTML = `
@@ -386,16 +361,15 @@ function renderList(containerId, items, searchTerm) {
         <div class="fname">
           ${it.pinned ? '📌 ' : ''}${esc(it.name)}
         </div>
-        <div class="fmeta">${currentViewIsAdmin ? `Sahip: ${it.ownerUid.slice(0, 8)}... · ` : ''}${e} · ${size(it.size)} · ${dateStr(it.date)}</div>
+        <div class="fmeta">${isAdmin ? `Sahip: ${it.ownerUid.slice(0, 8)}... · ` : ''}${e} · ${size(it.size)} · ${dateStr(it.date)}</div>
       </div>
       <svg class="chev" viewBox="0 0 8 14"><path d="M1 1l6 6-6 6"/></svg>`;
-    row.onclick = () => openSheet(it, currentViewIsAdmin);
+    row.onclick = () => openSheet(it);
     list.appendChild(row);
   });
 }
 
 function listenFiles() {
-  currentViewIsAdmin = false;
   const list = $("list");
   list.innerHTML = '<div class="spinner"></div>';
   if (unsubFiles) unsubFiles();
@@ -416,15 +390,14 @@ function listenFiles() {
     });
     
     allFilesData = items;
-    renderList("list", allFilesData, $("searchInput").value);
+    renderList(allFilesData, $("searchInput").value);
   }, err => {
     list.innerHTML = `<div class="empty">Dosyalar yüklenemedi (${esc(err.code || err.message)}).</div>`;
   });
 }
 
 function listenAllFilesForAdmin() {
-  currentViewIsAdmin = true;
-  const list = $("adminList");
+  const list = $("list");
   list.innerHTML = '<div class="spinner"></div>';
   if (unsubFiles) unsubFiles();
 
@@ -447,22 +420,17 @@ function listenAllFilesForAdmin() {
     });
 
     allFilesData = items;
-    renderList("adminList", allFilesData, $("adminSearchInput").value);
+    renderList(allFilesData, $("searchInput").value);
   }, err => {
     list.innerHTML = `<div class="empty">Dosyalar yüklenemedi (${esc(err.code || err.message)}).</div>`;
   });
 }
 
-/* ---------- Arama Dinleyicileri ---------- */
 $("searchInput").oninput = (e) => {
-  renderList("list", allFilesData, e.target.value);
+  renderList(allFilesData, e.target.value);
 };
 
-$("adminSearchInput").oninput = (e) => {
-  renderList("adminList", allFilesData, e.target.value);
-};
-
-/* ---------- Çoklu Dosya Seçme, Ekleme/Çıkarma & Drag-Drop ---------- */
+/* ---------- Çoklu Dosya Seçme & Yükleme ---------- */
 function pickFiles(fileList) {
   if (!fileList || fileList.length === 0) return;
   const newFilesArray = Array.from(fileList);
@@ -543,7 +511,6 @@ drop.addEventListener("drop", e => {
   pickFiles(e.dataTransfer.files);
 });
 
-/* ---------- Yükleme Mantığı ---------- */
 const CHUNK = 512 * 1024;            
 const MAX_DB = 25 * 1024 * 1024;     
 
@@ -636,7 +603,7 @@ $("uploadBtn").onclick = async () => {
 };
 
 /* ---------- Detay, Sabitleme, Silme & İndirme Mantığı ---------- */
-function openSheet(it, isAdminView) {
+function openSheet(it) {
   selected = it;
   const e = ext(it.name);
   $("sIcon").textContent = badge(e); 
@@ -646,18 +613,24 @@ function openSheet(it, isAdminView) {
   $("sSize").textContent = size(it.size);
   $("sDate").textContent = dateStr(it.date);
 
-  if (isAdminView) {
+  const isAdmin = currentUser && currentUser.uid === ADMIN_UID;
+  if (isAdmin) {
     $("ownerRow").style.display = "flex";
     $("sOwner").textContent = it.ownerUid;
   } else {
     $("ownerRow").style.display = "none";
   }
 
-  // Sabitleme buton yazısı
   $("pinBtn").textContent = it.pinned ? "Sabitlemeyi Kaldır" : "Başa Sabitle";
 
-  // Admin silme yetkisi kontrolü
-  if (currentUser && currentUser.uid === ADMIN_UID) {
+  // Admin her dosyayı silebilir, kullanıcı sadece kendi dosyasını sabitleyebilir/silebilir
+  if (isAdmin || it.ownerUid === currentUser.uid) {
+    $("pinBtn").style.display = "block";
+  } else {
+    $("pinBtn").style.display = "none";
+  }
+
+  if (isAdmin) {
     $("deleteBtn").style.display = "block";
   } else {
     $("deleteBtn").style.display = "none";
@@ -675,7 +648,6 @@ function closeSheet() {
 $("overlay").onclick = closeSheet; 
 $("closeBtn").onclick = closeSheet;
 
-// Sabitle / Sabiti Kaldır
 $("pinBtn").onclick = async () => {
   if (!selected) return;
   const newPinnedState = !selected.pinned;
@@ -688,7 +660,6 @@ $("pinBtn").onclick = async () => {
   }
 };
 
-// Admin Dosya Silme
 $("deleteBtn").onclick = async () => {
   if (!selected || currentUser.uid !== ADMIN_UID) return;
   if (!confirm(`"${selected.name}" adlı dosyayı kalıcı olarak silmek istediğinize emin misiniz?`)) return;
@@ -718,7 +689,6 @@ $("deleteBtn").onclick = async () => {
   }
 };
 
-// İndir
 $("downloadBtn").onclick = async () => {
   if (!selected) return;
   const btn = $("downloadBtn"); 
