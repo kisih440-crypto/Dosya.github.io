@@ -44,6 +44,7 @@ h1.large{font-size:34px;font-weight:700;letter-spacing:.2px;margin:0 0 6px}
 .btn:active{transform:scale(.98);opacity:.85}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.plain{background:var(--fill);color:var(--blue)}
+.btn.danger{background:var(--red);color:#fff}
 .link{background:none;border:none;color:var(--blue);font-size:15px;margin-top:18px;cursor:pointer;font-family:inherit}
 .err{color:var(--red);font-size:14px;min-height:20px;margin-top:12px;word-break:break-word}
 
@@ -56,6 +57,17 @@ h1.large{font-size:34px;font-weight:700;letter-spacing:.2px;margin:0 0 6px}
 .nav h1{font-size:32px;font-weight:700;margin:6px 0 0;line-height:1.2}
 .email{color:var(--sub);font-size:13px;margin:2px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .section{font-size:13px;text-transform:uppercase;color:var(--sub);margin:24px 8px 8px;letter-spacing:.3px;font-weight:600}
+
+/* Arama Çubuğu */
+.search-box{margin:16px 0 8px}
+.search-box input{
+  width:100%;border:none;outline:none;background:var(--card);color:var(--text);
+  font-size:16px;padding:12px 16px 12px 42px;border-radius:12px;font-family:inherit;
+  box-shadow:0 2px 8px rgba(0,0,0,.04);border:.5px solid var(--sep);
+  background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="%238a8a8e" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>');
+  background-repeat:no-repeat;background-position:14px center;
+}
+.search-box input::placeholder{color:var(--sub)}
 
 /* Upload */
 .drop{background:var(--card);border-radius:14px;padding:24px 16px;text-align:center;
@@ -89,10 +101,11 @@ input[type=file]{display:none}
   border-bottom:.5px solid var(--sep);transition:background .15s}
 .file:last-child{border-bottom:none}
 .file:active{background:var(--fill)}
+.file.pinned-row{background:rgba(0,122,255,.04)}
 .ficon{width:42px;height:42px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;
   color:#fff;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase}
 .finfo{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
-.fname{font-size:16px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.fname{font-size:16px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);display:flex;align-items:center;gap:6px}
 .fmeta{font-size:13px;color:var(--sub);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chev{width:8px;height:14px;fill:none;stroke:var(--sub);stroke-width:2;opacity:.6;flex:none;margin-left:4px}
 .empty{padding:34px 16px;text-align:center;color:var(--sub);font-size:15px}
@@ -142,7 +155,10 @@ input[type=file]{display:none}
 <!-- ANA EKRAN -->
 <div class="screen" id="homeScreen">
   <div class="nav">
-    <div class="nav-top"><span></span><button id="logoutBtn">Çıkış</button></div>
+    <div class="nav-top">
+      <button id="adminPanelBtn" style="display:none; color: var(--green); font-weight:600;">Admin Paneli</button>
+      <button id="logoutBtn">Çıkış</button>
+    </div>
     <h1>Dosyalarım</h1>
     <p class="email" id="userEmail"></p>
   </div>
@@ -160,8 +176,31 @@ input[type=file]{display:none}
     <button class="btn" id="uploadBtn">Yükle</button>
   </div>
 
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Dosyalarda ara...">
+  </div>
+
   <div class="section">Yüklenen Dosyalar</div>
   <div class="group" id="list"><div class="spinner"></div></div>
+</div>
+
+<!-- ADMIN PANELİ EKRANI -->
+<div class="screen" id="adminScreen">
+  <div class="nav">
+    <div class="nav-top">
+      <button id="backToHomeBtn">← Dosyalarım</button>
+      <button id="adminLogoutBtn">Çıkış</button>
+    </div>
+    <h1>Admin Paneli</h1>
+    <p class="email" id="adminUserEmail"></p>
+  </div>
+
+  <div class="search-box">
+    <input type="text" id="adminSearchInput" placeholder="Tüm dosyalarda ve kullanıcı UID'lerinde ara...">
+  </div>
+
+  <div class="section">Sistemdeki Tüm Kullanıcı Dosyaları</div>
+  <div class="group" id="adminList"><div class="spinner"></div></div>
 </div>
 
 <!-- DETAY SHEET -->
@@ -173,9 +212,12 @@ input[type=file]{display:none}
   <div class="group">
     <div class="kv"><span>Format</span><span id="sFormat"></span></div>
     <div class="kv"><span>Boyut</span><span id="sSize"></span></div>
+    <div class="kv" id="ownerRow" style="display:none"><span>Kullanıcı ID</span><span id="sOwner" style="font-size:12px"></span></div>
     <div class="kv"><span>Yüklenme</span><span id="sDate"></span></div>
   </div>
   <button class="btn" id="downloadBtn">İndir</button>
+  <button class="btn plain" id="pinBtn" style="margin-top:10px">Başa Sabitle</button>
+  <button class="btn danger" id="deleteBtn" style="margin-top:10px; display:none;">Dosyayı Sil</button>
   <button class="btn plain" id="closeBtn" style="margin-top:10px">Kapat</button>
 </div>
 
@@ -184,8 +226,8 @@ input[type=file]{display:none}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js";
-import { getDatabase, ref as dbRef, push, set, get, onValue } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js";
+import { getDatabase, ref as dbRef, push, set, get, onValue, update, remove } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDoNpYJUYWJYSoeL7YzvXooulawpFOhufs",
@@ -202,8 +244,12 @@ const auth = getAuth(app);
 const storage = getStorage(app);
 const db = getDatabase(app);
 
+const ADMIN_UID = "J0VHrKf0jBMssN4GyxmRLa8Kou63";
+
 const $ = id => document.getElementById(id);
 let currentUser = null, pickedFiles = [], selected = null, unsubFiles = null;
+let allFilesData = [];
+let currentViewIsAdmin = false;
 
 /* ---------- Yardımcı Fonksiyonlar ---------- */
 const colors = {
@@ -276,11 +322,20 @@ async function doLogin() {
 $("loginBtn").onclick = doLogin;
 $("password").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
 $("logoutBtn").onclick = () => signOut(auth);
+$("adminLogoutBtn").onclick = () => signOut(auth);
 
 onAuthStateChanged(auth, user => {
   currentUser = user;
   if (user) {
     $("userEmail").textContent = user.email;
+    $("adminUserEmail").textContent = user.email + " (Admin)";
+    
+    if (user.uid === ADMIN_UID) {
+      $("adminPanelBtn").style.display = "inline-block";
+    } else {
+      $("adminPanelBtn").style.display = "none";
+    }
+
     show("homeScreen"); 
     listenFiles();
   } else {
@@ -292,12 +347,126 @@ onAuthStateChanged(auth, user => {
   }
 });
 
+/* ---------- Navigasyon & Dinleme ---------- */
+$("adminPanelBtn").onclick = () => {
+  show("adminScreen");
+  listenAllFilesForAdmin();
+};
+
+$("backToHomeBtn").onclick = () => {
+  show("homeScreen");
+  listenFiles();
+};
+
+function renderList(containerId, items, searchTerm) {
+  const list = $(containerId);
+  
+  const query = (searchTerm || "").toLocaleLowerCase('tr-TR');
+  const filtered = items.filter(it => {
+    if (!query) return true;
+    const matchName = it.name.toLocaleLowerCase('tr-TR').includes(query);
+    const matchExt = ext(it.name).toLocaleLowerCase('tr-TR').includes(query);
+    const matchOwner = it.ownerUid && it.ownerUid.toLocaleLowerCase('tr-TR').includes(query);
+    return matchName || matchExt || matchOwner;
+  });
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty">${query ? "Aranan kriterlere uygun dosya bulunamadı." : "Henüz dosya yüklenmedi."}</div>`;
+    return;
+  }
+
+  list.innerHTML = "";
+  filtered.forEach(it => {
+    const e = ext(it.name);
+    const row = document.createElement("div");
+    row.className = `file ${it.pinned ? 'pinned-row' : ''}`;
+    row.innerHTML = `
+      <div class="ficon" style="background:${color(e)}">${esc(badge(e))}</div>
+      <div class="finfo">
+        <div class="fname">
+          ${it.pinned ? '📌 ' : ''}${esc(it.name)}
+        </div>
+        <div class="fmeta">${currentViewIsAdmin ? `Sahip: ${it.ownerUid.slice(0, 8)}... · ` : ''}${e} · ${size(it.size)} · ${dateStr(it.date)}</div>
+      </div>
+      <svg class="chev" viewBox="0 0 8 14"><path d="M1 1l6 6-6 6"/></svg>`;
+    row.onclick = () => openSheet(it, currentViewIsAdmin);
+    list.appendChild(row);
+  });
+}
+
+function listenFiles() {
+  currentViewIsAdmin = false;
+  const list = $("list");
+  list.innerHTML = '<div class="spinner"></div>';
+  if (unsubFiles) unsubFiles();
+
+  unsubFiles = onValue(dbRef(db, `files/${currentUser.uid}`), snap => {
+    const items = [];
+    snap.forEach(c => { 
+      const v = c.val(); 
+      items.push({ 
+        id: c.key, ownerUid: currentUser.uid, name: v.name, size: v.size, date: v.createdAt, 
+        path: v.path, store: v.store || "storage", chunks: v.chunks, type: v.type, pinned: !!v.pinned
+      }); 
+    });
+    
+    items.sort((a, b) => {
+      if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
+      return b.date - a.date;
+    });
+    
+    allFilesData = items;
+    renderList("list", allFilesData, $("searchInput").value);
+  }, err => {
+    list.innerHTML = `<div class="empty">Dosyalar yüklenemedi (${esc(err.code || err.message)}).</div>`;
+  });
+}
+
+function listenAllFilesForAdmin() {
+  currentViewIsAdmin = true;
+  const list = $("adminList");
+  list.innerHTML = '<div class="spinner"></div>';
+  if (unsubFiles) unsubFiles();
+
+  unsubFiles = onValue(dbRef(db, `files`), snap => {
+    const items = [];
+    snap.forEach(userSnap => {
+      const uid = userSnap.key;
+      userSnap.forEach(c => {
+        const v = c.val();
+        items.push({ 
+          id: c.key, ownerUid: uid, name: v.name, size: v.size, date: v.createdAt, 
+          path: v.path, store: v.store || "storage", chunks: v.chunks, type: v.type, pinned: !!v.pinned
+        });
+      });
+    });
+
+    items.sort((a, b) => {
+      if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
+      return b.date - a.date;
+    });
+
+    allFilesData = items;
+    renderList("adminList", allFilesData, $("adminSearchInput").value);
+  }, err => {
+    list.innerHTML = `<div class="empty">Dosyalar yüklenemedi (${esc(err.code || err.message)}).</div>`;
+  });
+}
+
+/* ---------- Arama Dinleyicileri ---------- */
+$("searchInput").oninput = (e) => {
+  renderList("list", allFilesData, e.target.value);
+};
+
+$("adminSearchInput").oninput = (e) => {
+  renderList("adminList", allFilesData, e.target.value);
+};
+
 /* ---------- Çoklu Dosya Seçme, Ekleme/Çıkarma & Drag-Drop ---------- */
 function pickFiles(fileList) {
   if (!fileList || fileList.length === 0) return;
   const newFilesArray = Array.from(fileList);
   
-  // Mevcut listedeki dosyalarla birleştir, mükerrer dosyaları filtrele
   newFilesArray.forEach(f => {
     const isAlreadyPicked = pickedFiles.some(item => item.file.name === f.name && item.file.size === f.size);
     if (!isAlreadyPicked) {
@@ -346,13 +515,11 @@ function renderPickedFiles() {
       <div class="progress" id="progress-${idx}"><i></i></div>
     `;
     
-    // İsim değişikliğini anlık olarak kaydet
     const inputEl = div.querySelector(".rename-input");
     inputEl.oninput = e => {
       pickedFiles[idx].baseName = e.target.value;
     };
 
-    // Kaldır butonunun tıklanması
     const removeBtn = div.querySelector(".remove-btn");
     removeBtn.onclick = () => removeFile(idx);
 
@@ -364,7 +531,7 @@ function renderPickedFiles() {
 
 $("fileInput").onchange = e => {
   pickFiles(e.target.files);
-  $("fileInput").value = ""; // Aynı dosyayı tekrar seçebilmeyi mümkün kılmak için sıfırla
+  $("fileInput").value = "";
 };
 
 const drop = $("drop");
@@ -376,7 +543,7 @@ drop.addEventListener("drop", e => {
   pickFiles(e.dataTransfer.files);
 });
 
-/* ---------- Yükleme Mantığı (Aynı Anda Çoklu Dosya) ---------- */
+/* ---------- Yükleme Mantığı ---------- */
 const CHUNK = 512 * 1024;            
 const MAX_DB = 25 * 1024 * 1024;     
 
@@ -418,7 +585,6 @@ $("uploadBtn").onclick = async () => {
   if (!pickedFiles.length || !currentUser) return;
   $("uploadBtn").disabled = true;
 
-  // Tüm dosya girdilerini topla ve formatı koruyarak isimleri güncelle
   const uploadTasks = pickedFiles.map(async (item, idx) => {
     const customBase = item.baseName ? item.baseName.trim() : "";
     const finalName = (customBase ? customBase : baseNameWithoutExt(item.file.name)) + "." + item.ext.toLowerCase();
@@ -430,7 +596,7 @@ $("uploadBtn").onclick = async () => {
     const base = {
       name: finalName, size: file.size,
       type: file.type || "application/octet-stream",
-      ext: item.ext, createdAt: Date.now()
+      ext: item.ext, createdAt: Date.now(), pinned: false
     };
 
     const progressDiv = $(`progress-${idx}`);
@@ -456,7 +622,6 @@ $("uploadBtn").onclick = async () => {
     }
   });
 
-  // Aynı anda (paralel) yüklemeleri başlat
   const results = await Promise.all(uploadTasks);
   const successCount = results.filter(Boolean).length;
 
@@ -470,50 +635,8 @@ $("uploadBtn").onclick = async () => {
   $("uploadBtn").disabled = false;
 };
 
-/* ---------- Liste Dinleme ---------- */
-function listenFiles() {
-  const list = $("list");
-  list.innerHTML = '<div class="spinner"></div>';
-  if (unsubFiles) unsubFiles();
-
-  unsubFiles = onValue(dbRef(db, `files/${currentUser.uid}`), snap => {
-    const items = [];
-    snap.forEach(c => { 
-      const v = c.val(); 
-      items.push({ 
-        id: c.key, name: v.name, size: v.size, date: v.createdAt, 
-        path: v.path, store: v.store || "storage", chunks: v.chunks, type: v.type 
-      }); 
-    });
-    items.sort((a, b) => b.date - a.date);
-
-    if (!items.length) { 
-      list.innerHTML = '<div class="empty">Henüz dosya yüklenmedi.</div>'; 
-      return; 
-    }
-
-    list.innerHTML = "";
-    items.forEach(it => {
-      const e = ext(it.name);
-      const row = document.createElement("div");
-      row.className = "file";
-      row.innerHTML = `
-        <div class="ficon" style="background:${color(e)}">${esc(badge(e))}</div>
-        <div class="finfo">
-          <div class="fname">${esc(it.name)}</div>
-          <div class="fmeta">${e} · ${size(it.size)} · ${dateStr(it.date)}</div>
-        </div>
-        <svg class="chev" viewBox="0 0 8 14"><path d="M1 1l6 6-6 6"/></svg>`;
-      row.onclick = () => openSheet(it);
-      list.appendChild(row);
-    });
-  }, err => {
-    list.innerHTML = `<div class="empty">Dosyalar yüklenemedi (${esc(err.code || err.message)}).</div>`;
-  });
-}
-
-/* ---------- Detay & İndirme Mantığı ---------- */
-function openSheet(it) {
+/* ---------- Detay, Sabitleme, Silme & İndirme Mantığı ---------- */
+function openSheet(it, isAdminView) {
   selected = it;
   const e = ext(it.name);
   $("sIcon").textContent = badge(e); 
@@ -522,6 +645,24 @@ function openSheet(it) {
   $("sFormat").textContent = e;
   $("sSize").textContent = size(it.size);
   $("sDate").textContent = dateStr(it.date);
+
+  if (isAdminView) {
+    $("ownerRow").style.display = "flex";
+    $("sOwner").textContent = it.ownerUid;
+  } else {
+    $("ownerRow").style.display = "none";
+  }
+
+  // Sabitleme buton yazısı
+  $("pinBtn").textContent = it.pinned ? "Sabitlemeyi Kaldır" : "Başa Sabitle";
+
+  // Admin silme yetkisi kontrolü
+  if (currentUser && currentUser.uid === ADMIN_UID) {
+    $("deleteBtn").style.display = "block";
+  } else {
+    $("deleteBtn").style.display = "none";
+  }
+
   $("overlay").classList.add("show"); 
   $("sheet").classList.add("show");
 }
@@ -534,6 +675,50 @@ function closeSheet() {
 $("overlay").onclick = closeSheet; 
 $("closeBtn").onclick = closeSheet;
 
+// Sabitle / Sabiti Kaldır
+$("pinBtn").onclick = async () => {
+  if (!selected) return;
+  const newPinnedState = !selected.pinned;
+  try {
+    await update(dbRef(db, `files/${selected.ownerUid}/${selected.id}`), { pinned: newPinnedState });
+    toast(newPinnedState ? "Dosya başa sabitlendi 📌" : "Sabitleme kaldırıldı");
+    closeSheet();
+  } catch (err) {
+    toast("İşlem başarısız: " + (err.message || err.code));
+  }
+};
+
+// Admin Dosya Silme
+$("deleteBtn").onclick = async () => {
+  if (!selected || currentUser.uid !== ADMIN_UID) return;
+  if (!confirm(`"${selected.name}" adlı dosyayı kalıcı olarak silmek istediğinize emin misiniz?`)) return;
+
+  const btn = $("deleteBtn");
+  btn.disabled = true;
+  btn.textContent = "Siliniyor...";
+
+  try {
+    if (selected.store === "db") {
+      await remove(dbRef(db, `chunks/${selected.ownerUid}/${selected.id}`));
+    } else if (selected.path) {
+      try {
+        await deleteObject(ref(storage, selected.path));
+      } catch (e) {
+        console.error("Storage delete warning:", e);
+      }
+    }
+    await remove(dbRef(db, `files/${selected.ownerUid}/${selected.id}`));
+    toast("Dosya kalıcı olarak silindi 🗑️");
+    closeSheet();
+  } catch (err) {
+    toast("Silme hatası: " + (err.message || err.code));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Dosyayı Sil";
+  }
+};
+
+// İndir
 $("downloadBtn").onclick = async () => {
   if (!selected) return;
   const btn = $("downloadBtn"); 
@@ -553,7 +738,7 @@ $("downloadBtn").onclick = async () => {
 
   try {
     if (selected.store === "db") {
-      const snap = await get(dbRef(db, `chunks/${currentUser.uid}/${selected.id}`));
+      const snap = await get(dbRef(db, `chunks/${selected.ownerUid}/${selected.id}`));
       if (!snap.exists()) throw new Error("Dosya parçaları bulunamadı.");
       
       const parts = [];
